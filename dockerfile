@@ -7,4 +7,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY app /app/app
 ENV PYTHONPATH=/app
 
-CMD ["python", "-m", "app.agent.main"]
+ENTRYPOINT ["python", "-m", "app.agent.main"]

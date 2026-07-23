@@ -1,12 +1,16 @@
 import sys
 sys.path.append("/content")
 
+import os
 import ollama
 import json
 import re
 from app.agent.prompts import SYSTEM_PROMPT
 from app.agent.state import AgentState
 from app.agent.tools import execute_bash, read_file, write_file
+
+ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+client = ollama.Client(host=ollama_host)
 
 AVAILABLE_TOOLS = {
     "execute_bash": execute_bash,
@@ -102,7 +106,7 @@ def run_agent(user_prompt: str):
     while True:
         try:
             print("Pensando...", flush=True)
-            response = ollama.chat(
+            response = client.chat(
                 model="qwen2.5-coder:7b-instruct-q4_K_M",
                 messages=state.get_history(),
                 tools=TOOLS_SCHEMA
@@ -139,6 +143,16 @@ def run_agent(user_prompt: str):
             print(f"Erro de execução: {e}", flush=True)
             break
 
+
 if __name__ == "__main__":
-    prompt = sys.argv[1] if len(sys.argv) > 1 else "Crie um diretório chamado abacate"
-    run_agent(prompt)
+    if len(sys.argv) > 1:
+        # se passou o comando direto no terminal
+        prompt = " ".join(sys.argv[1:])
+    else:
+        # se rodou so 'docker compose run --rm agent', ele pergunta ao user oq quer fazer
+        prompt = input("O que vamos construir hoje? > ")
+
+    if prompt.strip():
+        run_agent(prompt)
+    else:
+        print("Nenhuma instrução fornecida. Encerrando.")
