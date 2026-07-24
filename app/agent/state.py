@@ -5,8 +5,11 @@ class AgentState:
     def __init__(self):
         self.messages: List[Dict[str, Any]] = []
 
-    def add_message(self, role: str, content: str):
-        self.messages.append({"role": role, "content": content})
+    def add_message(self, role: str, content: str, tool_calls=None):
+        message = {"role": role, "content": content}
+        if tool_calls:
+            message["tool_calls"] = tool_calls
+        self.messages.append(message)
 
     def get_history(self) -> List[Dict[str, Any]]:
         return self.messages

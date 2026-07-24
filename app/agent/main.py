@@ -90,7 +90,11 @@ def extract_json_tools(text: str):
         try:
             data, end_idx = decoder.raw_decode(cleaned, idx)
             if isinstance(data, dict) and "name" in data and "arguments" in data:
-                calls.append({"function": data})
+                inner = data.get("function", data) if isinstance(data.get("function"), dict) else data
+                name = inner.get("name") or inner.get("function_name") or inner.get("tool")
+                arguments = inner.get("arguments") or inner.get("parameters") or inner.get("args")
+                if name and isinstance(arguments, dict):
+                    calls.append({"function": {"name": name, "arguments": arguments}})
             idx = end_idx
         except json.JSONDecodeError:
             idx += 1
@@ -107,16 +111,17 @@ def run_agent(user_prompt: str):
         try:
             print("Pensando...", flush=True)
             response = client.chat(
-                model="qwen2.5-coder:7b-instruct-q4_K_M",
+                model="qwen2.5-coder:32b",
                 messages=state.get_history(),
                 tools=TOOLS_SCHEMA
             )
             
             message = response["message"]
             content = message.get("content", "")
-            state.add_message("assistant", content)
+            native_tool_calls = message.get("tool_calls")
+            state.add_message("assistant", content, tool_calls=native_tool_calls)
 
-            tool_calls = message.get("tool_calls") or extract_json_tools(content)
+            tool_calls = native_tool_calls or extract_json_tools(content)
 
             if tool_calls:
                 for tool_call in tool_calls:

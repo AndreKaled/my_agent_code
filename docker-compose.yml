@@ -3,7 +3,7 @@ services:
     build: .
     container_name: my_coder_agent
     environment:
-      - OLLAMA_HOST=url_fodastica
+      - OLLAMA_HOST=https://leaders-whereas-thesaurus-vacancies.trycloudflare.com          
     volumes:
       - ./workspace:/workspace
     stdin_open: true
