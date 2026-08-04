@@ -1,48 +1,120 @@
-# Uso rápido
+# my_agent_code 
 
-### 1. Iniciar a infraestrutura
-Suba os containers necessários no seu computador:
-```bash
-docker compose up -d
+Um agente de codificação autônomo construído do zero — sem depender de GPU própria, sem assinatura de Claude Code/Codex, e sem a fricção de configurar ferramentas open source prontas como o OpenCode.
+
+## Por que esse projeto existe
+
+A ideia começou de um problema bem prático: eu queria um agente de IA pra me ajudar em atividades da faculdade e em projetos pessoais, mas:
+
+- **Meu computador não tem GPU pra rodar modelos localmente** com qualidade aceitável, testei modelos quantizados e tive travamentos e resultados ruins rodando em CPU e em GPU integrada.
+- **Claude Code e Codex resolvem, mas custam dinheiro**, e como estudante sem renda, isso não era opção.
+- **Testei o OpenCode**, mas esbarrei em dificuldade pra customizar/trocar de modelo e na dependência de hardware que eu não tenho.
+
+Em vez de desistir ou pagar, decidi resolver o problema de inferência gratuita por conta própria e, no processo, **construir meu próprio agente de codificação do zero**  entendendo cada peça em vez de só consumir uma ferramenta pronta. A busca por inferência grátis passou por algumas rotas até chegar no formato atual:
+
+1. **Oracle Cloud Always Free** (VM ARM gratuita pra sempre) — ideia original, mas a fila de capacidade disponível é grande e difícil de automatizar.
+2. **Google Colab** — GPU T4 gratuita, só que a sessão morre quando o notebook fecha e a URL do túnel muda toda vez.
+3. **Groq** — inferência de modelos open source (Llama, GPT-OSS, etc.) via API, gratuita e sem cartão de crédito, com rate limit generoso pra uso individual. É o motor padrão do projeto hoje.
+4. **Kaggle Notebooks** — alternativa ao Colab quando quero rodar um modelo específico via Ollama (30h/semana de GPU grátis, sessões mais longas).
+
+O resultado é um agente que roda **inteiramente de graça**, sem depender de uma só fonte de inferência.
+
+## Arquitetura
+
+O agente segue o loop de um coding agent que aprendi vendo uns videos da Anthropiclk, o modelo recebe o histórico da conversa + a lista de ferramentas disponíveis, decide se quer chamar uma ferramenta ou responder, o agente executa a ferramenta e devolve o resultado pro modelo, repetindo até ele decidir que a tarefa terminou.
+
+```mermaid
+flowchart TD
+    U["Usuário digita um prompt"] --> M["main.py — run_agent()"]
+    M --> S["AgentState (blackboard)\nhistórico da conversa"]
+    S --> P["LLMProvider.chat()"]
+    P -->|"factory.py escolhe"| G["GroqProvider\n(openai/gpt-oss-120b, etc.)"]
+    P -->|"ou"| O["OllamaProvider\n(qwen2.5-coder local/Colab/Kaggle)"]
+    G --> R["Resposta do modelo"]
+    O --> R
+    R --> D{"Pediu tool call?"}
+    D -->|"Sim"| T["tools.py executa\nexecute_bash / read_file / write_file"]
+    T --> S
+    D -->|"Não"| F["Resposta final exibida ao usuário"]
 ```
 
-### 2. Configurar o Modelo (Google Colab)
-1. Abra o [Google Colab](https://colab.research.google.com).
-2. Carregue o arquivo [`teste_agente.ipynb`](teste_agente.ipynb) disponível neste repositório.
-3. Execute todas as células do notebook.
-4. Copie a **URL pública** gerada pelo túnel da Cloudflare.
+**Peças principais:**
 
-### 3. Vincular o Host do Ollama
-Abra o arquivo [`docker-compose.yml`](docker-compose.yml) e cole a URL copiada diretamente na variável de ambiente correspondente:
+- **`main.py`** — orquestra o loop: manda o histórico pro provider, interpreta a resposta (tool call nativa ou JSON solto no texto, pra modelos menores que não seguem o formato à risca) e executa as ferramentas pedidas.
+- **`llm/`** — abstração de provider (padrão Strategy). `base.py` define a interface comum e normaliza tool calls entre diferentes formatos de API; `groq.py` e `ollama.py` implementam cada backend; `factory.py` escolhe qual usar via variável de ambiente, sem precisar mexer no resto do código pra trocar de modelo.
+- **`tools.py`** — as ferramentas que o agente pode executar. Cada uma é registrada com o decorador `@register_tool`, que gera automaticamente o schema JSON exigido pela API a partir da assinatura da função (via Pydantic) — não precisa escrever o schema na mão.
+- **`state.py`** — o "blackboard": guarda o histórico de mensagens (usuário, assistant, tool results) que é reenviado a cada chamada, já que os providers não têm memória própria entre requisições.
+
+## Ferramentas disponíveis hoje
+
+| Ferramenta | O que faz |
+|---|---|
+| `execute_bash` | Executa comandos de terminal dentro de `/workspace`, com timeout de 30s |
+| `read_file` | Lê o conteúdo de um arquivo |
+| `write_file` | Cria/sobrescreve um arquivo |
+
+`read_file` e `write_file` são restritas a `/workspace` — qualquer tentativa de acessar caminhos fora dali (`../../etc/...`) é bloqueada antes de tocar no disco.
+
+## Como rodar
+
+### 1. Escolha seu provider de inferência
+
+**Opção A — Groq (recomendado, mais simples)**
+Crie uma conta gratuita em [console.groq.com](https://console.groq.com) e gere uma API key.
+
+**Opção B — Ollama via Colab/Kaggle (modelo próprio)**
+Abra [`teste_agente.ipynb`](teste_agente.ipynb) no Google Colab ou Kaggle, rode todas as células e copie a URL pública gerada pelo túnel Cloudflare.
+
+### 2. Configure as variáveis de ambiente
+
+Edite o [`docker-compose.yml`](docker-compose.yml) (ou, melhor ainda, use um `.env` pra não versionar suas chaves):
+
 ```yaml
-OLLAMA_HOST=sua_url_da_cloudflare_aqui
+environment:
+  LLM_PROVIDER: groq              # ou "ollama"
+  GROQ_API_KEY: sua_chave_aqui
+  GROQ_MODEL: openai/gpt-oss-120b
+  OLLAMA_HOST: https://sua-url-cloudflare-aqui  # se usar Ollama
+  OLLAMA_MODEL: qwen2.5-coder:7b-instruct-q4_K_M
+```
+
+### 3. Suba e rode o agente
+
+```bash
+docker compose up -d
+docker compose run --rm agent
+```
+
+Ou passe o prompt direto:
+
+```bash
+docker compose run --rm agent "crie uma pasta chamada coisas_legais_para_nerds_felizes"
 ```
 
 > [!NOTE]
-> O modelo permanecerá ativo apenas enquanto o notebook do Google Colab estiver em execução.
+> Se estiver usando Ollama via Colab, o modelo só fica disponível enquanto o notebook estiver rodando — a URL muda a cada nova sessão.
 
-> [!IMPORTANT]
-> Você pode alterar o modelo livremente, basta se lembrar de alterar o model em [main.py](app/agent/main.py) e baixar e carregar o modelo desejado no [Google colab](https://colab.research.google.com).
----
+## Limitações conhecidas
 
-## Executando o agente
+Seguindo a filosofia de "primeiro fazer funcionar, depois melhorar", algumas coisas ainda faltam de propósito:
 
-Para iniciar o agente e enviar prompts, execute:
-```bash
-docker compose run --rm agent
-```
-> Escreva seu prompt e seja feliz! *(Ou triste, caso o modelo decida ficar completamente louco e nao conseguir fazer nada legal).*
+- **Sem limite de iterações** no loop principal — um modelo confuso pode ficar chamando ferramentas indefinidamente.
+- **Sem memória persistente** entre execuções — cada `docker compose run` começa do zero.
+- **Sem allowlist de comandos** no `execute_bash` — hoje o risco é baixo por rodar em container isolado e uso individual, mas não é adequado pra expor a outros usuários.
 
-Você também pode passar o prompt diretamente como argumento final do comando:
-```bash
-docker compose run --rm agent "crie uma pasta chamada coisas_legais_divertidas_para_nerds_felizes_lalalalala"
-```
+## Próximos passos que senti necessidade nos testes
 
----
-
-> [!WARNING]
-> **Permissões do Agente**
-> O agente possui acesso limitado ao ambiente. Ele pode utilizar apenas ferramentas básicas de sistema por enquanto, como:
-> - `execute_bash`
-> - `read_file`
-> - `write_file`
+- Ferramentas de navegação de código (`list_dir`, `grep_search`), limitando a leitura para bloquear `.env`
+- `apply_patch` (diffs) em vez de reescrever arquivos inteiros
+- Adicionar ferramentas de git para uso
+- Resumo automático de histórico pra não estourar a janela de contexto de modelos menores
+- Fallback automático entre providers quando um rate-limitar
+- Sistema de memória persistente para recuperar histórico de que fez momentos antes ou dias atrás, preferências e tals
+- UI amigável (rich), terminal assim rodando comando docker toda vez que executar é feio e chato
+- Disponibilizar ferramentas de pesquisa na web para quando o agente precisar pesquisar
+- Isolamento docker para o agente poder compilar ou instalar em container separado do seu
+- Human in the loop para comandos perigosos
+- Multi-Agentes? Manager & Workers? seria bom olhar o estado da arte até este ponto? (sinceramente não to interessado nisto no momento, não é prioridade)
+- Limite de iterações no loop
+- Loop de autoverificação (para rodar testes depois de editar e verificar se funciona de verdade)
+- checkpoint e roolback via git
