@@ -1,5 +1,7 @@
 import subprocess
 import os
+import json
+from app.agent.utils import register_tool
 
 WORKSPACE_ROOT = "/workspace"
 
@@ -23,13 +25,39 @@ def execute_bash(command: str) -> str:
             timeout=30,
             cwd=WORKSPACE_ROOT
         )
-        output = result.stdout
-        if result.stderr:
-            output += f"\n[STDERR]\n{result.stderr}"
-        return output if output else "Comando executado sem retorno visual."
-    except Exception as e:
-        return f"Erro ao executar comando: {str(e)}"
+        return json.dumps(
+            {
+                "success": result.returncode == 0,
+                "exit_code": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            },
+            ensure_ascii=False
+        )
 
+    except subprocess.TimeoutExpired:
+        return json.dumps(
+            {
+                "success": False,
+                "exit_code": None,
+                "stdout": "",
+                "stderr": "Timeout excedido (30 segundos)"
+            },
+            ensure_ascii=False
+        )
+
+    except Exception as e:
+        return json.dumps(
+            {
+                "success": False,
+                "exit_code": None,
+                "stdout": "",
+                "stderr": str(e)
+            },
+            ensure_ascii=False
+        )
+
+@register_tool
 def read_file(filepath: str) -> str:
     """Lê o conteúdo de um arquivo em /workspace."""
     full_path = _safe_path(filepath)
@@ -39,6 +67,7 @@ def read_file(filepath: str) -> str:
     except Exception as e:
         return f"Erro ao ler arquivo: {str(e)}"
 
+@register_tool
 def write_file(filepath: str, content: str) -> str:
     """Escreve conteúdo em um arquivo em /workspace."""
     full_path = _safe_path(filepath)

@@ -1,80 +1,19 @@
 import sys
 sys.path.append("/content")
 
-import os
-import ollama
 import json
 import re
 from app.agent.prompts import SYSTEM_PROMPT
 from app.agent.state import AgentState
-from app.agent.tools import execute_bash, read_file, write_file
+from app.agent.llm.factory import get_provider
+import app.agent.tools
+from app.agent.utils import (
+    AVAILABLE_TOOLS,
+    TOOLS_SCHEMA
+)
 
-ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-client = ollama.Client(host=ollama_host)
+provider = get_provider()
 
-AVAILABLE_TOOLS = {
-    "execute_bash": execute_bash,
-    "read_file": read_file,
-    "write_file": write_file
-}
-
-TOOLS_SCHEMA = [
-    {
-        "type": "function",
-        "function": {
-            "name": "execute_bash",
-            "description": "Executa um comando bash no terminal dentro do workspace.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "O comando bash a ser executado."
-                    }
-                },
-                "required": ["command"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": "Lê o conteúdo de um arquivo no workspace.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "filepath": {
-                        "type": "string",
-                        "description": "Caminho relativo do arquivo."
-                    }
-                },
-                "required": ["filepath"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "write_file",
-            "description": "Cria ou sobrescreve um arquivo no workspace.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "filepath": {
-                        "type": "string",
-                        "description": "Caminho relativo do arquivo."
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "Conteúdo de texto a ser gravado no arquivo."
-                    }
-                },
-                "required": ["filepath", "content"]
-            }
-        }
-    }
-]
 
 def extract_json_tools(text: str):
     """Extrai múltiplos objetos JSON sequenciais do texto da LLM."""
@@ -110,8 +49,7 @@ def run_agent(user_prompt: str):
     while True:
         try:
             print("Pensando...", flush=True)
-            response = client.chat(
-                model="qwen2.5-coder:32b",
+            response = provider.chat(
                 messages=state.get_history(),
                 tools=TOOLS_SCHEMA
             )
@@ -125,6 +63,7 @@ def run_agent(user_prompt: str):
 
             if tool_calls:
                 for tool_call in tool_calls:
+                    call_id = tool_call.get("id", "call_default")
                     func_name = tool_call["function"]["name"]
                     arguments = tool_call["function"]["arguments"]
 
@@ -135,6 +74,8 @@ def run_agent(user_prompt: str):
                         
                         state.messages.append({
                             "role": "tool",
+                            "tool_call_id": call_id,
+                            "name": func_name,
                             "content": tool_output
                         })
                     else:

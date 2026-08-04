@@ -3,7 +3,11 @@ services:
     build: .
     container_name: my_coder_agent
     environment:
-      - OLLAMA_HOST=https://leaders-whereas-thesaurus-vacancies.trycloudflare.com          
+      LLM_PROVIDER: groq
+      OLLAMA_HOST:  https://arrangements-permanent-windsor-reduce.trycloudflare.com                           
+      OLLAMA_MODEL: qwen2.5-coder:7b-instruct-q4_K_M
+      GROQ_API_KEY: 
+      GROQ_MODEL:   openai/gpt-oss-120b
     volumes:
       - ./workspace:/workspace
     stdin_open: true
