@@ -11,6 +11,7 @@ def _safe_path(filepath: str) -> str:
         raise ValueError(f"Caminho '{filepath}' tenta acessar fora do workspace, bloquado.")
     return full_path
 
+@register_tool
 def execute_bash(command: str) -> str:
     """Executa um comando de terminal no diretório atual de trabalho."""
     try:
