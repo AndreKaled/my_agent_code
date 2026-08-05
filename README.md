@@ -21,29 +21,33 @@ O resultado é um agente que roda **inteiramente de graça**, sem depender de um
 
 ## Arquitetura
 
-O agente segue o loop de um coding agent que aprendi vendo uns videos da Anthropiclk, o modelo recebe o histórico da conversa + a lista de ferramentas disponíveis, decide se quer chamar uma ferramenta ou responder, o agente executa a ferramenta e devolve o resultado pro modelo, repetindo até ele decidir que a tarefa terminou.
+O agente segue o loop de um coding agent que aprendi vendo uns videos da Anthropic, o modelo recebe o histórico da conversa + a lista de ferramentas disponíveis, decide se quer chamar uma ferramenta ou responder, o agente executa a ferramenta e devolve o resultado pro modelo, repetindo até ele decidir que a tarefa terminou.
 
 ```mermaid
 flowchart TD
-    U["Usuário digita um prompt"] --> M["main.py — run_agent()"]
-    M --> S["AgentState (blackboard)\nhistórico da conversa"]
+    U["Usuário digita um prompt"] --> M["main.py\nponto de entrada (CLI)"]
+    M --> A["Agent.run() — agent.py\norquestra o ciclo de raciocínio"]
+    A --> S["AgentState (blackboard)\nstate.py — histórico da conversa"]
     S --> P["LLMProvider.chat()"]
     P -->|"factory.py escolhe"| G["GroqProvider\n(openai/gpt-oss-120b, etc.)"]
     P -->|"ou"| O["OllamaProvider\n(qwen2.5-coder local/Colab/Kaggle)"]
     G --> R["Resposta do modelo"]
     O --> R
     R --> D{"Pediu tool call?"}
-    D -->|"Sim"| T["tools.py executa\nexecute_bash / read_file / write_file"]
+    D -->|"Sim"| T["ToolExecutor — tool_executor.py\nchama a função registrada em tools.py"]
     T --> S
     D -->|"Não"| F["Resposta final exibida ao usuário"]
 ```
 
 **Peças principais:**
-
-- **`main.py`** — orquestra o loop: manda o histórico pro provider, interpreta a resposta (tool call nativa ou JSON solto no texto, pra modelos menores que não seguem o formato à risca) e executa as ferramentas pedidas.
-- **`llm/`** — abstração de provider (padrão Strategy). `base.py` define a interface comum e normaliza tool calls entre diferentes formatos de API; `groq.py` e `ollama.py` implementam cada backend; `factory.py` escolhe qual usar via variável de ambiente, sem precisar mexer no resto do código pra trocar de modelo.
+ 
+- **`main.py`** — ponto de entrada enxuto: lê o prompt (argumento de linha de comando ou input interativo) e delega tudo pro `Agent`.
+- **`agent.py`** — a classe `Agent` concentra o ciclo de raciocínio: manda o histórico pro provider, interpreta a resposta (tool call nativa ou JSON solto no texto, pra modelos menores que não seguem o formato à risca) e despacha as ferramentas pedidas via `ToolExecutor`.
+- **`tool_executor.py`** — recebe uma tool call já normalizada, valida se a ferramenta existe no registro e executa, devolvendo o resultado no formato que o histórico espera.
+- **`llm/`** — abstração de provider (padrão Strategy). `base.py` define a interface comum e normaliza tool calls entre diferentes formatos de API (dict ou objeto SDK da OpenAI); `groq.py` e `ollama.py` implementam cada backend; `factory.py` escolhe qual usar via variável de ambiente, sem precisar mexer no resto do código pra trocar de modelo.
 - **`tools.py`** — as ferramentas que o agente pode executar. Cada uma é registrada com o decorador `@register_tool`, que gera automaticamente o schema JSON exigido pela API a partir da assinatura da função (via Pydantic) — não precisa escrever o schema na mão.
-- **`state.py`** — o "blackboard": guarda o histórico de mensagens (usuário, assistant, tool results) que é reenviado a cada chamada, já que os providers não têm memória própria entre requisições.
+- **`state.py`** — o "blackboard": guarda o histórico de mensagens (`add_system`, `add_user`, `add_assistant`, `add_tool_result`) que é reenviado a cada chamada, já que os providers não têm memória própria entre requisições.
+
 
 ## Ferramentas disponíveis hoje
 
