@@ -7,6 +7,8 @@ from app.agent.utils import (
     AVAILABLE_TOOLS,
     TOOLS_SCHEMA,
 )
+from app.agent.tool_executor import ToolExecutor
+from app.agent.utils import AVAILABLE_TOOLS
 
 
 class Agent:
@@ -18,6 +20,7 @@ class Agent:
         self.provider = provider
         self.state = AgentState()
         self.state.add_message("system", SYSTEM_PROMPT)
+        self.tool_executor = ToolExecutor(AVAILABLE_TOOLS)
 
     @staticmethod
     def extract_json_tools(text: str) -> list:
@@ -112,26 +115,8 @@ class Agent:
                     return
 
                 for tool_calls in tool_calls:
-                    call_id = tool_calls.get("id", "call_default")
-                    func_name = tool_call["function"]["name"]
-                    arguments = tool_call["function"]["arguments"]
-
-                    if func_name not in AVAILABLE_TOOLS:
-                        print(f"Ferramenta '{func_name}' não encontrada.\n",
-                        flush=True)
-                        continue
-
-                    print(f"Executando: {func_name}({arguments})", flush=True)
-
-                    tool_output = AVAILABLE_TOOLS[func_name](**arguments)
-
-                    print(f"Retorno: {tool_output}\n", flush=True)
-
-                    self.state.messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call_id,
-                            "name": func_name,
-                            "content": tool_output,
-                        }
-                    )
+                    try:
+                        tool_message = self.tool_executor.execute(tool_call)
+                        self.state.messages.append(tool_message)
+                    except Exception as e:
+                        print(e)
