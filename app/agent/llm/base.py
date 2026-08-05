@@ -7,7 +7,7 @@ class LLMProvider(ABC):
     @abstractmethod
     def chat(self, messages: list, tools: list | None = None) -> dict:
         """Executa uma conversa e retorna uma resposta no formato interno do agente"""
-        pass
+        raise NotImplementedError
 
     def _normalize_tool_calls(self, raw_tool_calls: list) -> list:
         """Método comum para normalizar argumentos de string JSON para dicionário"""

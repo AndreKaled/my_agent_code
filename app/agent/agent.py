@@ -19,7 +19,7 @@ class Agent:
     def __init__(self, provider):
         self.provider = provider
         self.state = AgentState()
-        self.state.add_message("system", SYSTEM_PROMPT)
+        self.state.add_system(SYSTEM_PROMPT)
         self.tool_executor = ToolExecutor(AVAILABLE_TOOLS)
 
     @staticmethod
@@ -37,9 +37,9 @@ class Agent:
         idx = 0
 
         while idx < len(cleaned):
-            idx.cleaned.find("{", idx)
+            idx = cleaned.find("{", idx)
 
-            if idx == 1:
+            if idx == -1:
                 break
 
             try:
@@ -76,47 +76,47 @@ class Agent:
 
                 idx = end_idx
 
-            except json.JSONDecoderError:
+            except json.JSONDecodeError:
                 idx += 1
 
         return calls
 
-        def run(self, user_prompt: str):
-            self.state.add_message("user", user_prompt)
+    def run(self, user_prompt: str):
+        self.state.add_user(user_prompt)
 
-            print(f"Tarefa recebida: {user_prompt}\n", flush=True)
+        print(f"Tarefa recebida: {user_prompt}\n", flush=True)
 
-            while True:
-                print("Pensando...", flush=True)
+        while True:
+            print("Pensando...", flush=True)
 
-                response = self.provider.chat(
-                    messages=self.state.get_history(),
-                    tools=TOOLS_SCHEMA,
-                )
+            response = self.provider.chat(
+                messages=self.state.history(),
+                tools=TOOLS_SCHEMA,
+            )
 
-                message = response["message"]
-                content = message.get("content", "")
-                native_tools_calls = message.get("tool_calls")
+            message = response["message"]
+            content = message.get("content", "")
+            native_tool_calls = message.get("tool_calls")
 
-                self.state.add_message(
-                    "assistant",
-                    content,
-                    tool_calls=native_tools_calls,
-                )
+            self.state.add_assistant(content,native_tool_calls)
 
-                tool_calls = (
-                    native_tools_calls
-                    or self.extract_json_tools(content)
-                )
+            tool_calls = (
+                native_tool_calls
+                or self.extract_json_tools(content)
+            )
 
-                if not tool_calls:
-                    print("\n[Resposta final da LLM]:", flush=True)
-                    print(content, flush=True)
-                    return
+            if not tool_calls:
+                print("\n[Resposta final da LLM]:", flush=True)
+                print(content, flush=True)
+                return
 
-                for tool_calls in tool_calls:
-                    try:
-                        tool_message = self.tool_executor.execute(tool_call)
-                        self.state.messages.append(tool_message)
-                    except Exception as e:
-                        print(e)
+            for tool_call in tool_calls:
+                try:
+                    tool_message = self.tool_executor.execute(tool_call)
+                    self.state.add_tool_result(
+                        tool_message["tool_call_id"],
+                        tool_message["name"],
+                        tool_message["content"]
+                    )
+                except Exception as e:
+                    print(e)
