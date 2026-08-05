@@ -1,5 +1,6 @@
 import inspect
 from pydantic import TypeAdapter
+import json
 
 AVAILABLE_TOOLS = {}
 TOOLS_SCHEMA = []
@@ -41,3 +42,19 @@ def register_tool(func):
     AVAILABLE_TOOLS[func.__name__] = func
     TOOLS_SCHEMA.append(schema)
     return func
+
+def tool_result(
+    success: bool,
+    operation: str,
+    message: str = "",
+    **kwargs
+) -> str:
+    return json.dumps(
+        {
+            "success": success,
+            "operation": operation,
+            "message": message,
+            **kwargs,
+        },
+        ensure_ascii=False
+    )
