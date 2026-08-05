@@ -8,8 +8,6 @@ from app.agent.utils import (
     TOOLS_SCHEMA,
 )
 from app.agent.tool_executor import ToolExecutor
-from app.agent.utils import AVAILABLE_TOOLS
-
 
 class Agent:
     """

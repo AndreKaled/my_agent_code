@@ -4,6 +4,9 @@ from pydantic import TypeAdapter
 AVAILABLE_TOOLS = {}
 TOOLS_SCHEMA = []
 
+def load_tools():
+    import app.agent.tools
+
 def register_tool(func):
     """Decorador que registra a função e gera o TOOLS_SCHEMA automaticamente"""
     # pegando docstring da funcao pra descricao da tool

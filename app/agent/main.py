@@ -2,6 +2,9 @@ import sys
 
 from app.agent.agent import Agent
 from app.agent.llm.factory import get_provider
+from app.agent.utils import load_tools
+
+load_tools()
 
 provider = get_provider()
 agent = Agent(provider)
