@@ -1,4 +1,4 @@
 /workspace/*
-.vscode/*
-.venv/*
+.vscode/
+.venv/
 docker-compose.yml
