@@ -56,6 +56,61 @@ def write_file(filepath: str, content: str) -> str:
         )
 
 @register_tool
+def edit_file(filepath: str, old_str: str, new_str: str) -> str:
+    """
+    Substitui um trecho exato de um arquivo por outro, sem reescrever o arquivo inteiro.
+    old_str precisa ser copiado exatamente como está no arquivo (recomendo usar read_file antes)
+    e precisa aparecer exatamente uma vez. Se aparecer mais de uma vez, inclua mais
+    linhas de contexto ao redor do trecho para torná-lo único.
+    """
+    try:
+        full_path = _safe_path(filepath)
+ 
+        with open(full_path, "r", encoding="utf-8") as f:
+            content = f.read()
+ 
+        occurrences = content.count(old_str)
+ 
+        if occurrences == 0:
+            return tool_result(
+                False,
+                "edit_file",
+                "old_str não encontrado no arquivo. Confira espaços, indentação e "
+                "quebras de linha, copie o trecho exatamente como aparece no read_file.",
+                path=filepath,
+            )
+ 
+        if occurrences > 1:
+            return tool_result(
+                False,
+                "edit_file",
+                f"old_str aparece {occurrences} vezes no arquivo e precisa ser único. "
+                "Inclua mais linhas de contexto ao redor do trecho para diferenciá-lo.",
+                path=filepath,
+                occurrences=occurrences,
+            )
+ 
+        new_content = content.replace(old_str, new_str, 1)
+ 
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+ 
+        return tool_result(
+            True,
+            "edit_file",
+            "Trecho substituído com sucesso",
+            path=filepath,
+        )
+ 
+    except Exception as e:
+        return tool_result(
+            False,
+            "edit_file",
+            "Erro editando arquivo",
+            error=str(e),
+        )
+
+@register_tool
 def create_directory(filepath: str) -> str:
     """
     Cria uma pasta dentro do workspace.
